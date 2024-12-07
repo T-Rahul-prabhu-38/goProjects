@@ -1,95 +1,108 @@
 package main
 
 import (
-	"encoding/csv" // Package to work with CSV files
-	"flag"         // Package to handle command-line flags
-	"fmt"          // Package for formatted I/O
-	"os"           // Package for file operations and program control
+	"encoding/csv" // For working with CSV files
+	"flag"          // For parsing command-line flags
+	"fmt"           // For formatted I/O
+	"os"            // For file operations and exiting the program
+	"strings"       // For string manipulations
+	"time"          // For working with timers
 )
 
 func main() {
-	// Define a flag to accept the CSV file name from the command line.
-	// Default is "problems.csv". Description is for the help message.
+	// Define command-line flags for CSV file name and time limit
 	csvFileName := flag.String("csv", "problems.csv", "a file with qna")
-	// Parse the command-line flags so the program can access their values.
+	timeLimit := flag.Int("limit", 30, "the time limit in secs")
+
+	// Parse the command-line flags
 	flag.Parse()
 
-	// Open the CSV file specified by the flag.
-	// Dereference `csvFileName` because it is a pointer.
+	// Open the CSV file specified by the user
 	file, err := os.Open(*csvFileName)
 	if err != nil {
-		// If the file cannot be opened, print an error message and exit the program.
+		// Exit the program if the file cannot be opened
 		exit(fmt.Sprintf("failed to open the CSV file %s", *csvFileName))
 	}
 
-	// Create a new CSV reader to read the file line by line.
+	// Create a new CSV reader
 	r := csv.NewReader(file)
-	// Read all lines from the CSV file into a slice of string slices.
+	// Read all lines from the CSV file
 	lines, err := r.ReadAll()
 	if err != nil {
-		// If the CSV file cannot be parsed, print an error message and exit the program.
+		// Exit the program if the CSV file cannot be parsed
 		exit("failed to parse the provided csv file")
 	}
 
-	// Parse the CSV lines into a slice of `problem` structs.
+	// Parse the lines from the CSV into a slice of problem structs
 	problems := parseLines(lines)
-	// Print the parsed problems (for debugging or verification purposes).
+	// Print the parsed problems for debugging purposes
 	fmt.Println(problems)
 
-	// Initialize a counter for correct answers.
+	// Create a timer that runs for the specified time limit
+	timer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
+
+	// Counter to track the number of correct answers
 	var count int = 0
 
-	// Iterate through each problem in the slice.
+	// Iterate over each problem
 	for i, p := range problems {
-		// Display the problem to the user with a formatted string.
+		// Print the current problem question
 		fmt.Printf("problem #%d :  %s = \n", i+1, p.q)
-		// Variable to store the user's answer.
-		var answer string
-		// Read the user's input (answer) from the console.
-		fmt.Scanf("%s", &answer)
-		// Compare the user's answer with the correct answer.
-		if answer == p.a {
-			// If correct, increment the counter and print a success message.
-			fmt.Println("correct answer")
-			count += 1
-		} else {
-			// If incorrect, print a failure message.
-			fmt.Println("incorrect answer")
+		// Create a channel to handle user input asynchronously
+		answerCh := make(chan string)
+
+		// Launch a goroutine to read the user's answer
+		go func() {
+			var answer string
+			fmt.Scanf("%s", &answer) // Read user input
+			answerCh <- answer       // Send the answer to the channel
+		}()
+
+		// Use a select statement to handle either timer expiration or user input
+		select {
+		case <-timer.C:
+			// If the timer expires, print the score and exit
+			fmt.Printf("\n correct answers are : %d/%d", count, len(problems))
+			return
+		case answer := <-answerCh:
+			// If an answer is received, check if it's correct
+			if answer == p.a {
+				count += 1
+			}
+		default:
+			// Default case does nothing (can be omitted in this context)
 		}
 	}
 
-	// After all problems are answered, display the total number of correct answers.
-	fmt.Printf("correct answers are : %d\n", count)
+	// Print the final score after all problems have been attempted
+	fmt.Printf("\n correct answers are : %d/%d", count, len(problems))
 }
 
-// Helper function to convert lines from the CSV into a slice of `problem` structs.
+// parseLines converts raw CSV data into a slice of problem structs
 func parseLines(lines [][]string) []problem {
-	// Create a slice of `problem` structs with the same length as the input.
+	// Create a slice of problem structs with the same length as the CSV lines
 	ret := make([]problem, len(lines))
 
-	// Loop through each line and populate the slice of `problem` structs.
+	// Iterate over the CSV lines
 	for i, line := range lines {
-		// Each line should have two entries: question (q) and answer (a).
+		// Populate the problem struct with trimmed question and answer
 		ret[i] = problem{
-			q: line[0], // First column is the question.
-			a: line[1], // Second column is the answer.
+			q: strings.TrimSpace(line[0]), // Trim whitespace from the question
+			a: strings.TrimSpace(line[1]), // Trim whitespace from the answer
 		}
 	}
 
-	// Return the slice of `problem` structs.
-	return ret
+	return ret // Return the slice of problems
 }
 
-// Struct to represent a single problem with a question and an answer.
+// problem struct represents a single question-answer pair
 type problem struct {
-	q string // The question text.
-	a string // The answer text.
+	q string // Question
+	a string // Answer
 }
 
-// Helper function to handle errors by printing a message and exiting the program.
+// exit prints an error message and terminates the program
 func exit(msg string) {
-	// Print the error message to the console.
-	fmt.Println(msg)
-	// Exit the program with a non-zero status (indicating failure).
-	os.Exit(1)
+	fmt.Println(msg) // Print the error message
+	os.Exit(1)       // Exit the program with a non-zero status
 }
