@@ -114,7 +114,6 @@ func main() {
 			LastName:  "Wachowski",
 		},
 	})
-
 	r := mux.NewRouter()
 	r.HandleFunc("/movies", getMovies).Methods("GET")
 	r.HandleFunc("/movies/{id}", getMovie).Methods("GET")
